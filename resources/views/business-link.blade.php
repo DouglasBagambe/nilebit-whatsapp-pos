@@ -19,4 +19,5 @@
 <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required>
 <button>Continue securely</button></form>
 @endif
-<p><small>Links expire after 15 minutes. Your existing POS permissions still apply.</small></p></main></html>
+<p><small>Links expire after 15 minutes. Your existing POS permissions still apply.</small></p>
+<p><small>Read the <a href="https://nilebitlabs.com/whatsapp-pos-privacy" target="_blank" rel="noopener noreferrer">WhatsApp POS Privacy Policy</a> before connecting. For help, email <a href="mailto:info@nilebitlabs.com">info@nilebitlabs.com</a>.</small></p></main></html>
