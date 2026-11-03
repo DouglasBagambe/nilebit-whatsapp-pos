@@ -1,63 +1,47 @@
+# Initial free test deployment. Render free Postgres expires after 30 days.
 services:
 - type: web
   name: nilebit-whatsapp-pos
   runtime: docker
   region: frankfurt
-  plan: 0.5c-512mb
+  plan: free
   repo: https://github.com/DouglasBagambe/nilebit-whatsapp-pos
   branch: feature/whatsapp-foundations
   autoDeployTrigger: 'off'
   healthCheckPath: /up
-  dockerCommand: bash deploy/start.sh web
-  preDeployCommand: bash deploy/start.sh migrate
+  dockerCommand: bash deploy/start.sh combined
   envVars:
-  - &id001
-    key: APP_NAME
+  - key: APP_NAME
     value: NileBit POS WhatsApp
-  - &id002
-    key: APP_ENV
+  - key: APP_ENV
     value: production
-  - &id003
-    key: APP_DEBUG
+  - key: APP_DEBUG
     value: 'false'
-  - &id004
-    key: LOG_CHANNEL
+  - key: LOG_CHANNEL
     value: stderr
-  - &id005
-    key: LOG_LEVEL
+  - key: LOG_LEVEL
     value: warning
-  - &id006
-    key: DB_CONNECTION
+  - key: DB_CONNECTION
     value: pgsql
-  - &id007
-    key: QUEUE_CONNECTION
+  - key: QUEUE_CONNECTION
     value: database
-  - &id008
-    key: DB_QUEUE_RETRY_AFTER
+  - key: DB_QUEUE_RETRY_AFTER
     value: '120'
-  - &id009
-    key: CACHE_STORE
+  - key: CACHE_STORE
     value: database
-  - &id010
-    key: SESSION_DRIVER
+  - key: SESSION_DRIVER
     value: database
-  - &id011
-    key: SESSION_ENCRYPT
+  - key: SESSION_ENCRYPT
     value: 'true'
-  - &id012
-    key: SESSION_SECURE_COOKIE
+  - key: SESSION_SECURE_COOKIE
     value: 'true'
-  - &id013
-    key: WHATSAPP_ENABLED
+  - key: WHATSAPP_ENABLED
     value: 'false'
-  - &id014
-    key: WHATSAPP_API_VERSION
+  - key: WHATSAPP_API_VERSION
     value: v25.0
-  - &id015
-    key: WHATSAPP_PHONE_NUMBER_ID
+  - key: WHATSAPP_PHONE_NUMBER_ID
     value: '1364950226710147'
-  - &id016
-    key: DB_URL
+  - key: DB_URL
     fromDatabase:
       name: nilebit-whatsapp-db
       property: connectionString
@@ -73,73 +57,11 @@ services:
     sync: false
   - key: PRODUCTION_API_URL
     sync: false
-- type: worker
-  name: nilebit-whatsapp-worker
-  runtime: docker
-  region: frankfurt
-  plan: 0.5c-512mb
-  repo: https://github.com/DouglasBagambe/nilebit-whatsapp-pos
-  branch: feature/whatsapp-foundations
-  autoDeployTrigger: 'off'
-  dockerCommand: bash deploy/start.sh worker
   maxShutdownDelaySeconds: 90
-  envVars:
-  - *id001
-  - *id002
-  - *id003
-  - *id004
-  - *id005
-  - *id006
-  - *id007
-  - *id008
-  - *id009
-  - *id010
-  - *id011
-  - *id012
-  - *id013
-  - *id014
-  - *id015
-  - *id016
-  - key: APP_KEY_BASE64
-    fromService:
-      name: nilebit-whatsapp-pos
-      type: web
-      envVarKey: APP_KEY_BASE64
-  - key: WHATSAPP_VERIFY_TOKEN
-    fromService:
-      name: nilebit-whatsapp-pos
-      type: web
-      envVarKey: WHATSAPP_VERIFY_TOKEN
-  - key: WHATSAPP_APP_SECRET
-    fromService:
-      name: nilebit-whatsapp-pos
-      type: web
-      envVarKey: WHATSAPP_APP_SECRET
-  - key: WHATSAPP_ACCESS_TOKEN
-    fromService:
-      name: nilebit-whatsapp-pos
-      type: web
-      envVarKey: WHATSAPP_ACCESS_TOKEN
-  - key: RETAIL_API_URL
-    fromService:
-      name: nilebit-whatsapp-pos
-      type: web
-      envVarKey: RETAIL_API_URL
-  - key: PRODUCTION_API_URL
-    fromService:
-      name: nilebit-whatsapp-pos
-      type: web
-      envVarKey: PRODUCTION_API_URL
-  - key: APP_URL
-    fromService:
-      name: nilebit-whatsapp-pos
-      type: web
-      envVarKey: RENDER_EXTERNAL_URL
 databases:
 - name: nilebit-whatsapp-db
   region: frankfurt
-  plan: 0.1c-256mb
-  diskSizeGB: 1
+  plan: free
   databaseName: nilebit_whatsapp
   user: nilebit_whatsapp
   ipAllowList: []

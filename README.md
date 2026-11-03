@@ -55,7 +55,7 @@ Outbound delivery is at least once. `sent_at` means Meta accepted the request an
 
 `php artisan test --compact` runs isolated tests with fake HTTP and a fresh test database. No Meta messages are sent.
 
-Two opt-in integration tests use only the known disposable audit POS servers on ports 8250/8251. They record one synthetic sale each and verify the receipt and stock through the same POS APIs. Run `NILEBIT_LOCAL_INTEGRATION=1 php artisan test --compact tests/Feature/LocalPosIntegrationTest.php` only with those audit fixtures running, never with real customer accounts or forwarded production services.
+Three opt-in integration tests use only the known disposable audit POS servers on ports 8250/8251. They record one synthetic sale each and verify the receipt and stock through the same POS APIs. Run `NILEBIT_LOCAL_INTEGRATION=1 php artisan test --compact tests/Feature/LocalPosIntegrationTest.php` only with those audit fixtures running, never with real customer accounts or forwarded production services.
 
 ## Remaining release requirements
 
@@ -63,3 +63,10 @@ Two opt-in integration tests use only the known disposable audit POS servers on 
 - PostgreSQL concurrent webhook/confirmation tests, queue ordering/recovery tests under multiple workers and a real Meta test-number round trip.
 - Full catalogue paging at the POS API layer and customer paging beyond 500 search matches; chat product menus themselves page through the loaded catalogue. Search narrows customer matches.
 - Remaining Retail/Production modules from the audited backlog. Backend payment methods record how a sale was paid; they do not collect mobile money or card funds.
+
+
+## Hosting checkpoint
+
+The checked-in `render.yaml` currently describes the owner-requested **free initial test**: one web container supervising Apache and the queue worker, plus Render free Postgres. This is not an always-on SLA, and the free database expires after 30 days. Uptime checks do not remove those platform limits. Move DB_URL to durable external Postgres or upgrade storage before expiry; export and verify a backup first. No paid plan is authorized.
+
+The container omits URL paths/referrers from Apache access logs to avoid recording bearer linking URLs. Render terminates public HTTPS; Apache marks the internally forwarded request as HTTPS without trusting client forwarding headers. Keep the same APP_KEY_BASE64 throughout redeployments. Secrets are entered privately in Render; no Meta secrets are committed.
