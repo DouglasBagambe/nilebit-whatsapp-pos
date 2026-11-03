@@ -8,7 +8,7 @@ services:
   branch: feature/whatsapp-foundations
   autoDeployTrigger: 'off'
   healthCheckPath: /up
-  dockerCommand: web
+  dockerCommand: bash deploy/start.sh web
   preDeployCommand: bash deploy/start.sh migrate
   envVars:
   - &id001
@@ -81,7 +81,7 @@ services:
   repo: https://github.com/DouglasBagambe/nilebit-whatsapp-pos
   branch: feature/whatsapp-foundations
   autoDeployTrigger: 'off'
-  dockerCommand: worker
+  dockerCommand: bash deploy/start.sh worker
   maxShutdownDelaySeconds: 90
   envVars:
   - *id001

@@ -13,5 +13,4 @@ RUN composer dump-autoload --no-dev --optimize --no-interaction \
     && chown -R www-data:www-data storage bootstrap/cache
 COPY deploy/apache.conf /etc/apache2/sites-available/000-default.conf
 EXPOSE 10000
-ENTRYPOINT ["bash", "/var/www/html/deploy/start.sh"]
-CMD ["web"]
+CMD ["bash", "/var/www/html/deploy/start.sh", "web"]
