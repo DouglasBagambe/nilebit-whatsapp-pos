@@ -1,6 +1,6 @@
 FROM php:8.5-apache-bookworm AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends libicu-dev libonig-dev libpq-dev libcurl4-openssl-dev unzip git \
-    && docker-php-ext-install -j2 intl mbstring pdo_pgsql pcntl bcmath opcache curl \
+    && docker-php-ext-install -j2 intl mbstring pdo_pgsql pcntl bcmath curl \
     && a2enmod rewrite headers \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
