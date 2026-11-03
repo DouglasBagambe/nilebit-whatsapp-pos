@@ -23,3 +23,36 @@ jobs:
           import yaml,json,jsonschema
           jsonschema.validate(yaml.safe_load(open('render.yaml')),json.load(open('/tmp/render.schema.json')))
           PY
+  postgres-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: gateway_test
+          POSTGRES_USER: gateway_test
+          POSTGRES_PASSWORD: local-ci-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: mbstring, intl, pdo_pgsql, pcntl
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Verify gateway against PostgreSQL
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: gateway_test
+          DB_USERNAME: gateway_test
+          DB_PASSWORD: local-ci-only
+        run: php artisan test --compact
