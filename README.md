@@ -67,7 +67,7 @@ Three opt-in integration tests use only the known disposable audit POS servers o
 
 ## Hosting checkpoint
 
-The checked-in `render.yaml` currently describes the owner-requested **free initial test**: one web container supervising Apache and the queue worker, plus Render free Postgres. This is not an always-on SLA, and the free database expires after 30 days. Uptime checks do not remove those platform limits. Move DB_URL to durable external Postgres or upgrade storage before expiry; export and verify a backup first. No paid plan is authorized.
+The checked-in `render.yaml` currently describes the owner-requested **free initial test**: one web container supervising Apache and the queue worker, with an external Neon Postgres DB_URL. The bot has its own Neon project on the Free plan, rather than a 30-day Render database. Free service and database quotas still apply; uptime checks do not remove those platform limits. No paid plan is authorized.
 
 The container omits URL paths/referrers from Apache access logs to avoid recording bearer linking URLs. Render terminates public HTTPS; Apache marks the internally forwarded request as HTTPS without trusting client forwarding headers. Keep the same APP_KEY_BASE64 throughout redeployments. Secrets are entered privately in Render; no Meta secrets are committed.
 

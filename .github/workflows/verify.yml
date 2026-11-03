@@ -5,12 +5,63 @@ permissions:
 jobs:
   docker:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: gateway_container_test
+          POSTGRES_USER: gateway_test
+          POSTGRES_PASSWORD: local-ci-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - name: Validate container build
         run: docker build --tag nilebit-whatsapp-test .
       - name: Check Apache configuration
         run: docker run --rm --entrypoint apache2ctl nilebit-whatsapp-test configtest
+      - name: Verify hosted web and worker together
+        env:
+          PGPASSWORD: local-ci-only
+        run: |
+          docker run -d --name gateway --network host \
+            -e APP_ENV=production -e APP_URL=https://localhost:10000 \
+            -e APP_KEY_BASE64=YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE= \
+            -e DB_CONNECTION=pgsql -e DB_URL=postgresql://gateway_test:local-ci-only@127.0.0.1:5432/gateway_container_test \
+            -e QUEUE_CONNECTION=database -e CACHE_STORE=database -e SESSION_DRIVER=database \
+            -e WHATSAPP_ON_DEMAND_WORKER=true -e WHATSAPP_ENABLED=true \
+            -e WHATSAPP_APP_SECRET=ci-signature-secret -e WHATSAPP_PHONE_NUMBER_ID=12345 \
+            -e WHATSAPP_VERIFY_TOKEN=ci-verify-secret -e WHATSAPP_API_VERSION=v25.0 \
+            nilebit-whatsapp-test bash deploy/start.sh combined
+          for attempt in $(seq 1 45); do
+            if curl -fsS http://localhost:10000/up >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://localhost:10000/up >/dev/null
+          python - <<'PY'
+          import json,time,hmac,hashlib,urllib.request
+          body=json.dumps({'object':'whatsapp_business_account','entry':[{'changes':[{'field':'messages','value':{'metadata':{'phone_number_id':'12345'},'messages':[{'id':'wamid.container-ci','from':'256700000099','type':'text','timestamp':str(int(time.time())),'text':{'body':'Menu'}}]}}]}]}).encode()
+          signature='sha256='+hmac.new(b'ci-signature-secret',body,hashlib.sha256).hexdigest()
+          req=urllib.request.Request('http://localhost:10000/api/whatsapp/webhook',data=body,headers={'Content-Type':'application/json','X-Hub-Signature-256':signature})
+          assert urllib.request.urlopen(req).status==200
+          PY
+          for attempt in $(seq 1 20); do
+            count=$(psql -h 127.0.0.1 -U gateway_test -d gateway_container_test -tAc "SELECT count(*) FROM wa_inbound_events WHERE processed_at IS NOT NULL")
+            if [ "$count" = "1" ]; then break; fi
+            sleep 1
+          done
+          test "$count" = "1"
+          test "$(psql -h 127.0.0.1 -U gateway_test -d gateway_container_test -tAc 'SELECT count(*) FROM wa_outbound_messages')" = "1"
+          test "$(psql -h 127.0.0.1 -U gateway_test -d gateway_container_test -tAc 'SELECT count(*) FROM wa_outbound_messages WHERE sent_at IS NOT NULL')" = "0"
+          docker stop --time 90 gateway
+      - name: Container diagnostics on failure
+        if: failure()
+        run: docker logs --tail 100 gateway || true
   blueprint:
     runs-on: ubuntu-latest
     steps:

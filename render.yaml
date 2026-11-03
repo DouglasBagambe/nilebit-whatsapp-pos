@@ -1,4 +1,4 @@
-# Initial free test deployment. Render free Postgres expires after 30 days.
+# Free Render web service with persistent external Neon Postgres.
 services:
 - type: web
   name: nilebit-whatsapp-pos
@@ -44,9 +44,7 @@ services:
   - key: WHATSAPP_PHONE_NUMBER_ID
     value: '1364950226710147'
   - key: DB_URL
-    fromDatabase:
-      name: nilebit-whatsapp-db
-      property: connectionString
+    sync: false
   - key: APP_KEY_BASE64
     generateValue: true
   - key: WHATSAPP_VERIFY_TOKEN
@@ -60,10 +58,3 @@ services:
   - key: PRODUCTION_API_URL
     sync: false
   maxShutdownDelaySeconds: 90
-databases:
-- name: nilebit-whatsapp-db
-  region: frankfurt
-  plan: free
-  databaseName: nilebit_whatsapp
-  user: nilebit_whatsapp
-  ipAllowList: []
