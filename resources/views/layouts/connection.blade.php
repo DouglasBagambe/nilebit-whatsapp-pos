@@ -26,8 +26,8 @@
 @endif
 </head>
 <body><div class="page">
-<aside class="story" aria-label="NileBit POS for WhatsApp">
-    <a class="brand" href="https://nilebitlabs.com" target="_blank" rel="noopener noreferrer" aria-label="NileBit Labs website"><img class="brand-wordmark" src="{{ asset('brand/nilebit-pos-whatsapp-dark.svg') }}" alt="NileBit POS for WhatsApp" width="340" height="104"></a>
+<aside class="story" aria-label="NileBit POS on WhatsApp">
+    <a class="brand" href="https://nilebitlabs.com" target="_blank" rel="noopener noreferrer" aria-label="NileBit Labs website"><img class="brand-wordmark" src="{{ asset('brand/nilebit-pos-whatsapp-dark.svg') }}" alt="NileBit POS on WhatsApp" width="340" height="104"></a>
     <div class="story-copy"><div class="eyebrow">Less admin. More business.</div><h2>Your business.<br> <span>One conversation.</span></h2><p class="story-description">Your sales, stock and production. The same NileBit POS, now a message away.</p></div>
     <div class="chat-preview" aria-label="Illustration of the NileBit POS chat menu"><div class="chat-top"><span class="chat-avatar"><img src="{{ asset('brand/nilebit-pos-icon.svg') }}" alt="" width="36" height="36"></span><span>NileBit POS<small>Your business assistant</small></span></div><div class="chat-bubble"><strong>What would you like to do?</strong>Choose an action to get started.<div class="chat-actions"><span>Sell</span><span>Stock</span><span>Reports</span></div></div><div class="preview-label"><span>A simpler working day</span><span>Chat preview</span></div></div>
     <div class="story-foot"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>One account. The same business data.</div>
