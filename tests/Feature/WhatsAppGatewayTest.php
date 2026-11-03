@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Jobs\ProcessInboundMessage;
 use App\Jobs\SendWhatsAppMessage;
+use App\Services\QueueWakeup;
 use App\Services\WhatsAppConversation;
 use Illuminate\Contracts\Queue\Job;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -67,6 +68,21 @@ class WhatsAppGatewayTest extends TestCase
         $this->assertStringNotContainsString('Hi', $event->payload);
         $this->assertSame('Hi', json_decode(Crypt::decryptString($event->payload), true)['text']['body']);
         Queue::assertPushed(ProcessInboundMessage::class, 2);
+    }
+
+    public function test_valid_inbound_delivery_signals_the_local_worker_after_persisting_work(): void
+    {
+        $this->configure();
+        Queue::fake();
+        $wakeup = $this->mock(QueueWakeup::class);
+        $wakeup->shouldReceive('notify')->once()->andReturnUsing(function (): void {
+            $this->assertDatabaseCount('wa_inbound_events', 1);
+        });
+
+        $this->receive($this->payload())->assertOk();
+
+        Queue::assertPushed(ProcessInboundMessage::class, 1);
+        Http::assertNothingSent();
     }
 
     public function test_another_phone_account_is_ignored_even_with_valid_signature(): void

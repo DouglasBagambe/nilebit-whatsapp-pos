@@ -22,7 +22,7 @@ elif [[ "${1:-web}" == "combined" ]]; then
   sed -i "s/VirtualHost \*:10000/VirtualHost *:${PORT:-10000}/" /etc/apache2/sites-available/000-default.conf
   apache2-foreground &
   web_pid=$!
-  php artisan queue:work --sleep=2 --tries=30 --timeout=60 --no-interaction &
+  php artisan whatsapp:work-on-demand --no-interaction &
   worker_pid=$!
   stop_children() {
     kill -TERM "$worker_pid" "$web_pid" 2>/dev/null || true

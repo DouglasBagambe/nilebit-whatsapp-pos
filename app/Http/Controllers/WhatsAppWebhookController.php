@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\ProcessInboundMessage;
+use App\Services\QueueWakeup;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -66,6 +67,10 @@ class WhatsAppWebhookController extends Controller
         }
         foreach (array_unique($eventIds) as $id) {
             ProcessInboundMessage::dispatch($id);
+        }
+
+        if ($eventIds !== []) {
+            app(QueueWakeup::class)->notify();
         }
 
         return response()->json(['received' => true]);
