@@ -1,0 +1,25 @@
+name: Verify gateway
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate container build
+        run: docker build --tag nilebit-whatsapp-test .
+      - name: Check Apache configuration
+        run: docker run --rm --entrypoint apache2ctl nilebit-whatsapp-test configtest
+  blueprint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Render schema
+        run: |
+          python -m pip install pyyaml jsonschema
+          curl -fsSL https://render.com/schema/render.yaml.json -o /tmp/render.schema.json
+          python - <<'PY'
+          import yaml,json,jsonschema
+          jsonschema.validate(yaml.safe_load(open('render.yaml')),json.load(open('/tmp/render.schema.json')))
+          PY
