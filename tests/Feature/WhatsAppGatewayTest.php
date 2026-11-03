@@ -193,6 +193,28 @@ class WhatsAppGatewayTest extends TestCase
         $this->assertSame('wamid.outgoing', DB::table('wa_outbound_messages')->value('provider_message_id'));
     }
 
+    public function test_provider_rejection_reports_safe_codes_without_marking_the_reply_sent(): void
+    {
+        $this->configure();
+        config(['whatsapp.api_version' => 'v25.0', 'whatsapp.access_token' => 'private-test-token']);
+        Queue::fake();
+        Http::fake(['https://graph.facebook.com/v25.0/12345/messages' => Http::response([
+            'error' => ['code' => 190, 'error_subcode' => 463, 'message' => 'private-provider-details'],
+        ], 401)]);
+        $this->receive($this->payload())->assertOk();
+        (new ProcessInboundMessage(DB::table('wa_inbound_events')->value('id')))->handle(app(WhatsAppConversation::class));
+
+        try {
+            (new SendWhatsAppMessage(DB::table('wa_outbound_messages')->value('id')))->handle();
+            $this->fail('A rejected reply must remain pending.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('WhatsApp did not confirm delivery acceptance (HTTP 401; code 190; subcode 463).', $exception->getMessage());
+        }
+
+        $this->assertNull(DB::table('wa_outbound_messages')->value('sent_at'));
+        $this->assertNull(DB::table('wa_outbound_messages')->value('provider_message_id'));
+    }
+
     public function test_outbound_replies_wait_for_earlier_pending_replies_in_the_same_conversation(): void
     {
         $this->configure();

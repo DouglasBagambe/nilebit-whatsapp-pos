@@ -53,7 +53,14 @@ class SendWhatsAppMessage implements ShouldQueue
             $response = Http::withToken($token)->timeout(15)->connectTimeout(5)->withOptions(['allow_redirects' => false])
                 ->post("https://graph.facebook.com/{$version}/{$phone}/messages", ['messaging_product' => 'whatsapp', 'to' => $conversation->sender] + $payload);
             if (! $response->successful() || ! is_string($response->json('messages.0.id'))) {
-                throw new RuntimeException('WhatsApp did not confirm delivery acceptance.');
+                $code = $response->json('error.code');
+                $subcode = $response->json('error.error_subcode');
+                throw new RuntimeException(sprintf(
+                    'WhatsApp did not confirm delivery acceptance (HTTP %d; code %s; subcode %s).',
+                    $response->status(),
+                    is_int($code) ? (string) $code : 'unknown',
+                    is_int($subcode) ? (string) $subcode : 'unknown',
+                ));
             }
             DB::table('wa_outbound_messages')->where('id', $message->id)->update([
                 'provider_message_id' => $response->json('messages.0.id'), 'sent_at' => now(), 'updated_at' => now(),
