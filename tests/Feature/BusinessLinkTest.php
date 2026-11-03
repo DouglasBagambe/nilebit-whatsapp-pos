@@ -74,7 +74,7 @@ class BusinessLinkTest extends TestCase
         $url = $this->linkUrl();
         $this->travel(16)->minutes();
 
-        $this->get($url)->assertGone();
+        $this->get($url)->assertGone()->assertSee('You need a fresh link.')->assertSee('Send Menu in WhatsApp');
 
         Http::assertNothingSent();
         $this->assertDatabaseCount('wa_business_bindings', 0);
@@ -89,5 +89,21 @@ class BusinessLinkTest extends TestCase
 
         $this->assertDatabaseCount('wa_business_bindings', 0);
         $this->assertNull(DB::table('wa_link_requests')->value('consumed_at'));
+    }
+
+    public function test_unreachable_pos_preserves_the_selected_system_and_email_but_not_the_password(): void
+    {
+        $url = $this->linkUrl();
+        config(['whatsapp.backends.production.url' => 'https://production.example.test/api']);
+        Http::fake(['https://production.example.test/api/auth/login' => Http::failedConnection()]);
+
+        $this->from($url)->post($url.'/login', ['backend' => 'production', 'email' => 'amina@example.test', 'password' => 'private-password'])
+            ->assertRedirect($url)->assertSessionHasErrors('email')
+            ->assertSessionHasInput('backend', 'production')->assertSessionHasInput('email', 'amina@example.test')
+            ->assertSessionMissing('_old_input.password');
+
+        $this->assertDatabaseCount('wa_business_bindings', 0);
+        $this->assertNull(DB::table('wa_link_requests')->value('consumed_at'));
+        Http::assertSentCount(1);
     }
 }

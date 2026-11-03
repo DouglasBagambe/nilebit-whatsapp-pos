@@ -45,4 +45,17 @@ class BusinessLinkTransportTest extends TestCase
         $this->get($url)->assertServiceUnavailable();
         Http::assertNothingSent();
     }
+
+    public function test_connection_script_uses_a_fresh_nonce_matching_the_content_security_policy(): void
+    {
+        $url = $this->issue();
+        $response = $this->get($url)->assertOk();
+        preg_match('/script-src \'nonce-([^\']+)\'/u', $response->headers->get('Content-Security-Policy'), $matches);
+
+        $this->assertNotEmpty($matches[1] ?? null);
+        $response->assertSee('nonce="'.$matches[1].'"', escape: false);
+        $response->assertSee('connection.js');
+        $next = $this->get($url)->assertOk();
+        $this->assertNotSame($response->headers->get('Content-Security-Policy'), $next->headers->get('Content-Security-Policy'));
+    }
 }

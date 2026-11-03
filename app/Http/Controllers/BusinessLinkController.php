@@ -6,9 +6,11 @@ use App\Services\BusinessLink;
 use App\Services\PosClient;
 use App\Services\WhatsAppConversation;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -29,7 +31,7 @@ class BusinessLinkController extends Controller
         $candidate = $stored ? json_decode(Crypt::decryptString($stored), true, flags: JSON_THROW_ON_ERROR) : null;
         $backends = collect(config('whatsapp.backends'))->filter(fn ($backend) => ! empty($backend['url']))->keys();
 
-        return response()->view('business-link', ['token' => $token, 'candidate' => $candidate, 'backends' => $backends, 'maskedPhone' => $maskedPhone])
+        return response()->view('business-link', ['token' => $token, 'candidate' => $candidate, 'backends' => $backends, 'maskedPhone' => $maskedPhone, 'expiresAt' => Carbon::parse($link->expires_at)])
             ->header('Cache-Control', 'no-store')->header('Referrer-Policy', 'no-referrer');
     }
 
@@ -39,8 +41,9 @@ class BusinessLinkController extends Controller
         $data = $request->validate(['backend' => ['required', Rule::in(['retail', 'production'])], 'email' => ['required', 'email', 'max:255'], 'password' => ['required', 'string', 'max:1000']]);
         try {
             $candidate = $pos->login($data['backend'], $data['email'], $data['password']);
-        } catch (ConnectionException) {
-            return back()->withErrors(['email' => 'The POS could not be reached. Please try again.']);
+        } catch (ConnectionException|RequestException) {
+            return back()->withErrors(['email' => 'Your POS is taking too long to respond or is temporarily unavailable. Please try again shortly.'])
+                ->withInput($request->only('backend', 'email'));
         }
         $request->session()->regenerate();
         $request->session()->put($this->sessionKey($token), Crypt::encryptString(json_encode($candidate + ['backend' => $data['backend']], JSON_THROW_ON_ERROR)));

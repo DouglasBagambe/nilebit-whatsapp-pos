@@ -16,12 +16,14 @@ class ProtectBusinessLink
             abort_unless(hash_equals(mb_strtolower((string) parse_url($url, PHP_URL_HOST)), mb_strtolower($request->getHost())), 400, 'Unrecognized linking host.');
             abort_unless($request->isSecure(), 400, 'Open the secure HTTPS link from WhatsApp.');
         }
+        $nonce = base64_encode(random_bytes(24));
+        $request->attributes->set('connection_script_nonce', $nonce);
         $response = $next($request);
         $response->headers->set('Cache-Control', 'no-store, private');
         $response->headers->set('Referrer-Policy', 'no-referrer');
         $response->headers->set('X-Frame-Options', 'DENY');
         $response->headers->set('X-Content-Type-Options', 'nosniff');
-        $response->headers->set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
+        $response->headers->set('Content-Security-Policy', "default-src 'none'; script-src 'nonce-{$nonce}'; style-src 'unsafe-inline'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
         $response->headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
 
         return $response;
