@@ -72,7 +72,7 @@ class CustomerBrowser
     {
         $id = (string) Str::uuid();
         DB::table('wa_actions')->insert(['id' => $id, 'conversation_id' => $conversation->id, 'version' => $conversation->version,
-            'kind' => $kind, 'binding_id' => $binding->id, 'payload' => Crypt::encryptString(json_encode($data, JSON_THROW_ON_ERROR)),
+            'kind' => $kind, 'binding_id' => $binding->id, 'payload' => Crypt::encryptString(json_encode($data + ['typed_title' => $title], JSON_THROW_ON_ERROR)),
             'expires_at' => now()->addMinutes(15), 'created_at' => now(), 'updated_at' => now()]);
 
         return array_filter(['id' => $id, 'title' => Str::limit($title, 24, ''), 'description' => $description ? Str::limit($description, 72, '') : null], fn ($value) => $value !== null);

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Services\ChatFlow;
 use App\Services\WhatsAppConversation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
@@ -12,6 +13,22 @@ use Tests\TestCase;
 class StockBrowserTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_product_matching_suggests_variants_and_preserves_exact_sku_matches(): void
+    {
+        $flow = app(ChatFlow::class);
+        $products = [
+            ['id' => 1, 'name' => 'Coca-Cola 330 ml', 'sku' => 'CC-330'],
+            ['id' => 2, 'name' => 'Coca-Cola 500 ml', 'sku' => 'CC-500'],
+            ['id' => 3, 'name' => 'Orange Juice', 'sku' => 'OJ-500'],
+        ];
+
+        [$matches, $suggested] = $flow->findProducts($products, 'Coke-Cola');
+        $this->assertTrue($suggested);
+        $this->assertSame([1, 2], array_column($matches, 'id'));
+        $this->assertSame([[$products[1]], false], $flow->findProducts($products, 'cc-500'));
+        $this->assertSame([[], false], $flow->findProducts($products, 'apples'));
+    }
 
     public function test_stock_pages_searches_by_sku_and_reloads_current_units_without_writes(): void
     {

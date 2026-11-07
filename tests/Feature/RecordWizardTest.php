@@ -118,11 +118,11 @@ class RecordWizardTest extends TestCase
         $id = $this->business();
         $menu = $this->choose($id, $this->send($id), 'Business tasks');
         $this->choose($id, $menu, 'Damaged stock');
-        $result = $this->send($id, 'Juice');
+        $result = $this->send($id, 'Jui');
 
         $this->assertContains('Juice', array_column($result['interactive']['action']['sections'][0]['rows'], 'title'));
         $this->assertDatabaseHas('wa_operations', ['kind' => 'record:damage', 'step' => '0']);
-        Http::assertSent(fn ($request) => str_contains($request->url(), '/products?') && $request['search'] === 'Juice' && $request['per_page'] === 6);
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/products?') && $request['search'] === 'Jui' && $request['per_page'] === 6);
         Http::assertNotSent(fn ($request) => $request->method() === 'POST');
     }
 

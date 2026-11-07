@@ -46,7 +46,7 @@ class ReportBrowser
                 $caps = $this->pos->read($binding, 'capabilities');
                 $today = CarbonImmutable::createFromFormat('!Y-m-d', $caps['today']);
                 $from = match ($data['period']) {
-                    'today' => $today, 'week' => $today->subDays(6), 'month' => $today->startOfMonth(),
+                    'today' => $today, 'week' => $today->subDays(6), 'calendar_week' => $today->startOfWeek(CarbonImmutable::MONDAY), 'month' => $today->startOfMonth(),
                     default => throw ValidationException::withMessages(['period' => 'Choose a supported reporting period.']),
                 };
                 $query = ['from' => $from->toDateString(), 'to' => $today->toDateString()];

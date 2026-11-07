@@ -44,6 +44,9 @@ class GuidedSale
         }
         $state = json_decode(Crypt::decryptString($draft->state), true, flags: JSON_THROW_ON_ERROR);
         $step = $draft->step;
+        if ($kind === 'sale_start' && isset($data['quantity'])) {
+            $state['suggested_quantity'] = $data['quantity'];
+        }
         if ($kind === 'sale_cancel') {
             if ($step === 'review') {
                 $recorded = $this->pos->operation($binding, 'wa-sale-'.$draft->id);
@@ -101,7 +104,7 @@ class GuidedSale
             $index = $state['editing'] ?? count($state['items']);
             $state['items'][$index] = ['product_id' => $product['id'], 'name' => $product['name'], 'quantity' => $quantity,
                 'unit' => $unit['name'], 'conversion' => $unit['conversion'], 'line_total' => (int) round($quantity * (int) $unit['price'])];
-            unset($state['editing']);
+            unset($state['editing'], $state['suggested_quantity']);
             $state['discount'] = min($state['discount'] ?? 0, array_sum(array_column($state['items'], 'line_total')));
             $step = 'cart';
         } elseif ($kind === 'sale_edit' && $step === 'cart') {
@@ -208,10 +211,15 @@ class GuidedSale
         $rows = [];
         $body = Str::limit($binding->name, 60, '')."\n";
         $page = max(0, (int) ($data['page'] ?? 0));
-        $search = $kind === 'sale_text' ? mb_substr(trim($message['text']['body'] ?? ''), 0, 100) : ($data['search'] ?? '');
+        $search = $kind === 'sale_text' ? mb_substr(trim($message['text']['body'] ?? ''), 0, 100) : mb_substr($data['search'] ?? '', 0, 100);
         if ($step === 'products') {
-            $products = collect($this->pos->stock($binding))->filter(fn ($product) => (float) $product['stock'] > 0 && ($search === '' || str_contains(mb_strtolower($product['name'].' '.($product['sku'] ?? '')), mb_strtolower($search))))->values()->all();
-            $body .= 'Choose a product. You can also type a product name to search.';
+            $available = array_values(array_filter($this->pos->stock($binding), fn ($product) => (float) $product['stock'] > 0));
+            [$products, $suggested] = app(ChatFlow::class)->findProducts($available, $search);
+            $body .= match (true) {
+                $suggested => 'Did you mean one of these products? Confirm the product by typing its name or choosing it.',
+                $products === [] => 'No in-stock products match. Try another name or SKU.',
+                default => 'Choose a product, or type a product name to search.',
+            };
             foreach (array_slice($products, $page * 7, 7) as $product) {
                 $rows[] = $this->row($conversation, $draft, 'sale_product', $product['name'], ['product' => $product['id']], $product['stock'].' '.$product['base_unit'].' · SKU '.($product['sku'] ?? $product['id']));
             }
@@ -225,13 +233,19 @@ class GuidedSale
             $this->pages($rows, $conversation, $draft, 'sale_units', $page, count($units));
         } elseif ($step === 'quantity') {
             $body .= $state['product']['name'].' · '.$state['unit']['name']."\nChoose a quantity, or type another number.";
-            foreach ([1, 2, 3, 5, 10] as $quantity) {
+            $quantities = ['1', '2', '3', '5', '10'];
+            if (isset($state['suggested_quantity'])) {
+                array_unshift($quantities, $state['suggested_quantity']);
+                $body .= "\nRequested quantity: ".$state['suggested_quantity'].'.';
+            }
+            foreach (array_unique($quantities) as $quantity) {
                 $rows[] = $this->row($conversation, $draft, 'sale_quantity', (string) $quantity, ['quantity' => $quantity]);
             }
         } elseif ($step === 'cart') {
             $body .= $this->summary($state, $page);
             $rows[] = $this->row($conversation, $draft, 'sale_products', 'Add another product');
             $rows[] = $this->row($conversation, $draft, 'sale_checkout', 'Choose payment');
+            $body .= "\nType Checkout, or choose another cart action.";
             $rows[] = $this->row($conversation, $draft, 'sale_edit', 'Edit / remove a line');
             $rows[] = $this->row($conversation, $draft, 'sale_discount', 'Order discount');
             $this->pages($rows, $conversation, $draft, 'sale_cart', $page, count($state['items']), '', 6);
@@ -293,7 +307,9 @@ class GuidedSale
             $this->pages($rows, $conversation, $draft, 'sale_review_page', $page, count($details), '', 6);
             if ($page === $last) {
                 $body .= "\nConfirm to record this sale in your POS.";
-                $rows[] = $this->row($conversation, $draft, 'sale_confirm', 'Confirm sale');
+                $confirm = $this->row($conversation, $draft, 'sale_confirm', 'Confirm sale');
+                $rows[] = $confirm;
+                $body .= "\nOr type: ".app(ChatFlow::class)->confirmationCommand($confirm['id']);
             }
         }
         $rows[] = $this->row($conversation, $draft, 'sale_cancel', 'Cancel sale');
@@ -350,7 +366,7 @@ class GuidedSale
     {
         $id = (string) Str::uuid();
         DB::table('wa_actions')->insert(['id' => $id, 'conversation_id' => $conversation->id, 'version' => $conversation->version,
-            'binding_id' => $draft->binding_id, 'kind' => $kind, 'payload' => Crypt::encryptString(json_encode($data + ['draft' => $draft->id], JSON_THROW_ON_ERROR)),
+            'binding_id' => $draft->binding_id, 'kind' => $kind, 'payload' => Crypt::encryptString(json_encode($data + ['draft' => $draft->id, 'typed_title' => $title], JSON_THROW_ON_ERROR)),
             'expires_at' => $draft->expires_at, 'created_at' => now(), 'updated_at' => now()]);
 
         return array_filter(['id' => $id, 'title' => Str::limit($title, 24, ''), 'description' => $description ? Str::limit($description, 72, '') : null], fn ($value) => $value !== null);
