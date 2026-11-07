@@ -125,7 +125,9 @@ class GuidedCustomer
                 ? 'Add customer: '.Str::limit($state['payload']['name'], 255, '')."\nPhone: ".($state['payload']['phone'] ?? 'None')
                 : 'Record payment for '.Str::limit($state['customer']['name'], 100, '')."\nAmount: ".$state['amount']."\nMethod: ".$state['method']."\nReference: ".($state['payload']['reference'] ?? 'None');
             $body .= "\nConfirm to save this in your POS.";
-            $rows[] = $this->flow->row($conversation, $operation, 'contact_confirm', $operation->kind === 'customer_create' ? 'Confirm customer' : 'Confirm payment');
+            $confirm = $this->flow->row($conversation, $operation, 'contact_confirm', $operation->kind === 'customer_create' ? 'Confirm customer' : 'Confirm payment');
+            $rows[] = $confirm;
+            $body .= "\nOr type: ".$this->flow->confirmationCommand($confirm['id']);
         }
         $rows[] = $this->flow->row($conversation, $operation, 'contact_cancel', 'Cancel task');
 

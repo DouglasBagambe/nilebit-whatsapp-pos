@@ -40,7 +40,7 @@ class StockBrowser
 
             return $this->flow->menu($body, $rows, 'Product details');
         }
-        $filtered = array_values(array_filter($products, fn ($product) => $search === '' || str_contains(mb_strtolower($product['name'].' '.($product['sku'] ?? '')), mb_strtolower($search))));
+        [$filtered, $suggested] = $this->flow->findProducts($products, $search);
         $page = min(max(0, (int) ($data['page'] ?? 0)), max(0, (int) ceil(count($filtered) / 6) - 1));
         $rows = [];
         foreach (array_slice($filtered, $page * 6, 6) as $product) {
@@ -54,6 +54,6 @@ class StockBrowser
         }
         $rows[] = $this->flow->row($conversation, $controls, 'menu', 'Back to menu');
 
-        return $this->flow->menu(Str::limit($binding->name, 60, '')."\nStock: ".count($filtered).' matching products · page '.($page + 1)."\nIncludes products with zero stock.\nChoose a product for current quantities and selling units.\nSearch by typing: stock mango", $rows, 'Stock');
+        return $this->flow->menu(Str::limit($binding->name, 60, '')."\nStock: ".count($filtered).' matching products · page '.($page + 1).($suggested ? "\nDid you mean one of these products?" : '')."\nIncludes products with zero stock.\nChoose a product for current quantities and selling units.\nSearch by typing: stock mango", $rows, 'Stock');
     }
 }

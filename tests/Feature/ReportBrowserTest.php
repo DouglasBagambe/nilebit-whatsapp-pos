@@ -37,7 +37,9 @@ class ReportBrowserTest extends TestCase
 
             return $send(['interactive' => ['list_reply' => ['id' => $row['id']]]]);
         };
-        $reports = $choose($send(), 'Reports');
+        $typed = $send(['text' => ['body' => 'Show sales report last 7 days']]);
+        $this->assertStringContainsString('Net sales: 9000', $typed['interactive']['body']['text']);
+        $reports = $send(['text' => ['body' => 'Reports']]);
         $periods = $choose($reports, 'Sales summary');
         $figures = $choose($periods, 'Last 7 days');
         $this->assertStringContainsString('2026-10-28 to 2026-11-03', $figures['interactive']['body']['text']);

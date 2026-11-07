@@ -64,6 +64,35 @@ class GuidedSaleTest extends TestCase
         return $this->choose($id, $menu, '3');
     }
 
+    public function test_typed_sale_suggests_misspelled_product_and_requires_current_confirmation_code(): void
+    {
+        $id = $this->setupBusiness();
+        $this->fakePos();
+        $type = fn (string $text) => $this->send($id, ['text' => ['body' => $text]]);
+
+        $suggestion = $type('Sell 2.5 Mangoe Juice');
+        $this->assertStringContainsString('Did you mean', $suggestion['interactive']['body']['text']);
+        $this->assertDatabaseHas('wa_sale_drafts', ['step' => 'products']);
+        $type('Mango Juice');
+        $quantity = $type('bottle');
+        $this->assertStringContainsString('Requested quantity: 2.5', $quantity['interactive']['body']['text']);
+        $this->assertStringContainsString('exceeds the stock', $type('31')['text']['body']);
+        $type('2.5');
+        $type('checkout');
+        $type('cash');
+        $review = $type('walk in');
+        $this->assertStringContainsString('Total: 5000', $review['interactive']['body']['text']);
+        preg_match('/Confirm [0-9A-F]{8}/', $review['interactive']['body']['text'], $firstCode);
+        $type('confirm sale');
+        $review = $type($firstCode[0]);
+        preg_match('/Confirm [0-9A-F]{8}/', $review['interactive']['body']['text'], $currentCode);
+        Http::assertNotSent(fn ($request) => $request->method() === 'POST');
+        $type($currentCode[0]);
+        $type($currentCode[0]);
+        Http::assertSent(fn ($request) => $request->method() === 'POST' && $request['items'][0]['quantity'] === 2.5);
+        $this->assertCount(1, Http::recorded(fn ($request) => $request->method() === 'POST'));
+    }
+
     public function test_walk_in_cash_sale_requires_review_and_uses_the_existing_pos_api(): void
     {
         $id = $this->setupBusiness();

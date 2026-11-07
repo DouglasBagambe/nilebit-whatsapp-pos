@@ -30,7 +30,12 @@ class WhatsAppConversation
     public function reply(object $conversation, array $message): array
     {
         $reply = $message['interactive']['list_reply']['id'] ?? $message['interactive']['button_reply']['id'] ?? null;
-        $text = mb_strtolower(trim($message['text']['body'] ?? ''));
+        $rawText = trim($message['text']['body'] ?? '');
+        $text = mb_strtolower($rawText);
+        $flow = app(ChatFlow::class);
+        if (! $reply && $text !== 'menu') {
+            $reply = $flow->typedAction($conversation, $text);
+        }
         if (! $reply && $text !== 'menu' && app(ChatFlow::class)->pending($conversation)) {
             $pending = app(ChatFlow::class)->pending($conversation);
 
@@ -48,14 +53,59 @@ class WhatsAppConversation
 
             return app(GuidedSale::class)->handle($conversation, null, $message);
         }
-        if (! $reply && str_starts_with($text, 'debt ') && ($binding = $this->activeBinding($conversation))) {
-            return app(CustomerBrowser::class)->handle($conversation, $binding, null, trim(mb_substr($message['text']['body'], 5)));
+        if (! $reply && ($binding = $this->activeBinding($conversation))) {
+            $command = $flow->normalize($text);
+            if (preg_match('/^(?:check |show |view )?(?:stock|inventory)(?: (?:for |of )?(.*))?$/iu', $rawText, $matches)) {
+                return app(StockBrowser::class)->handle($conversation, $binding, null, $matches[1] ?? '');
+            }
+            if (preg_match('/^(?:sell|record (?:a )?sale)(?:\s+(.*))?$/iu', $rawText, $matches)) {
+                $search = trim($matches[1] ?? '');
+                $quantity = null;
+                if (preg_match('/^(\d{1,7}(?:\.\d{1,3})?)\s+(.+)$/u', $search, $line)
+                    && (float) $line[1] > 0 && (float) $line[1] <= 1000000) {
+                    [, $quantity, $search] = $line;
+                }
+
+                return app(GuidedSale::class)->handle($conversation, $this->typedCommand('sale_start', ['search' => $search, 'quantity' => $quantity]), $message);
+            }
+            if (preg_match('/^(?:show |view )?(dashboard|today at a glance|(?:sales|profit) (?:report|summary)|debt report|customer debt)(?: (today|last 7 days|this week|this month))?$/', $command, $matches)) {
+                $resource = match ($matches[1]) {
+                    'dashboard', 'today at a glance' => 'dashboard',
+                    'debt report', 'customer debt' => 'debt_report',
+                    'sales report', 'sales summary' => 'sales_report',
+                    default => 'profit_report',
+                };
+                $period = match ($matches[2] ?? '') {
+                    'today' => 'today', 'last 7 days' => 'week', 'this week' => 'calendar_week', 'this month' => 'month', default => null,
+                };
+
+                return app(ReportBrowser::class)->handle($conversation, $binding, $this->typedCommand('report_open', ['resource' => $resource, 'period' => $period]));
+            }
+            if (preg_match('/^(?:debt(?: for)?|customers?)(?: (.*))?$/iu', $rawText, $matches)) {
+                return app(CustomerBrowser::class)->handle($conversation, $binding, null, $matches[1] ?? '');
+            }
+            foreach (app(RecordForms::class)->definitions($binding->backend) as $key => $definition) {
+                if ($command === $flow->normalize($definition['title'])) {
+                    return app(RecordWizard::class)->handle($conversation, $this->typedCommand('record_start', ['form' => $key]), $message);
+                }
+            }
+            $route = match ($command) {
+                'reports', 'show reports' => [ReportBrowser::class, 'report_menu'],
+                'sales history', 'sales receipts', 'receipts' => [SalesHistory::class, 'history_list'],
+                'recent tasks', 'activity' => [RecentTasks::class, 'activity_list'],
+                default => null,
+            };
+            if ($route !== null) {
+                return app($route[0])->handle($conversation, $binding, $this->typedCommand($route[1]));
+            }
+            if (in_array($command, ['business tasks', 'tasks'], true)) {
+                return app(RecordWizard::class)->handle($conversation, $this->typedCommand('record_menu'), $message);
+            }
         }
-        if (! $reply && ($text === 'stock' || str_starts_with($text, 'stock ')) && ($binding = $this->activeBinding($conversation))) {
-            return app(StockBrowser::class)->handle($conversation, $binding, null, trim(mb_substr(trim($message['text']['body']), 6)));
-        }
-        $showProfiles = false;
-        $warning = '';
+        $showProfiles = ! $reply && in_array($flow->normalize($text), ['switch business', 'switch shop', 'businesses'], true);
+        $warning = ! $reply && $text !== '' && ! $showProfiles && ! in_array($flow->normalize($text), ['menu', 'hi', 'hello', 'hey', 'help'], true)
+            ? "I couldn't match that request. Try Stock mango, Sell, Reports, Sales history, or Business tasks.\n\n"
+            : '';
         $page = 0;
         if ($reply) {
             $action = DB::table('wa_actions')->where('id', $reply)->where('conversation_id', $conversation->id)->first();
@@ -126,7 +176,7 @@ class WhatsAppConversation
         if (! $active || $showProfiles) {
             $page = min($page, max(0, (int) ceil($bindings->count() / 5) - 1));
             foreach ($bindings->slice($page * 5, 5) as $binding) {
-                $rows[] = ['id' => $this->action($conversation, 'switch', $binding->id), 'title' => Str::limit($binding->name, 24, ''), 'description' => ucfirst($binding->backend).' · Switch business'];
+                $rows[] = ['id' => $this->action($conversation, 'switch', $binding->id, typedTitle: $binding->name), 'title' => Str::limit($binding->name, 24, ''), 'description' => ucfirst($binding->backend).' · Switch business'];
             }
 
             if ($page > 0) {
@@ -138,9 +188,14 @@ class WhatsAppConversation
         }
 
         return ['type' => 'interactive', 'interactive' => [
-            'type' => 'list', 'body' => ['text' => $warning.($active ? 'Active: '.$active->name : 'Choose your business')."\nChoose what you would like to do."],
+            'type' => 'list', 'body' => ['text' => $warning.($active ? 'Active: '.$active->name : 'Choose your business')."\nChoose an option or type a command, such as Stock, Sell, Reports or Business tasks."],
             'action' => ['button' => 'POS options', 'sections' => [['title' => 'Business profiles', 'rows' => $rows]]],
         ]];
+    }
+
+    private function typedCommand(string $kind, array $payload = []): object
+    {
+        return (object) ['kind' => $kind, 'payload' => Crypt::encryptString(json_encode($payload, JSON_THROW_ON_ERROR))];
     }
 
     private function activeBinding(object $conversation): ?object
@@ -148,11 +203,11 @@ class WhatsAppConversation
         return DB::table('wa_business_bindings')->where('id', $conversation->binding_id)->where('conversation_id', $conversation->id)->whereNull('revoked_at')->first();
     }
 
-    private function action(object $conversation, string $kind, ?int $bindingId = null, int $page = 0): string
+    private function action(object $conversation, string $kind, ?int $bindingId = null, int $page = 0, ?string $typedTitle = null): string
     {
         $id = (string) Str::uuid();
         DB::table('wa_actions')->insert(['id' => $id, 'conversation_id' => $conversation->id, 'version' => $conversation->version,
-            'kind' => $kind, 'binding_id' => $bindingId, 'page' => $page, 'expires_at' => now()->addMinutes(15), 'created_at' => now(), 'updated_at' => now()]);
+            'kind' => $kind, 'binding_id' => $bindingId, 'page' => $page, 'payload' => $typedTitle === null ? null : Crypt::encryptString(json_encode(['typed_title' => $typedTitle], JSON_THROW_ON_ERROR)), 'expires_at' => now()->addMinutes(15), 'created_at' => now(), 'updated_at' => now()]);
 
         return $id;
     }

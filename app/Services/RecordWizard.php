@@ -184,7 +184,9 @@ class RecordWizard
                 $rows[] = $this->flow->row($conversation, $operation, 'record_review_page', 'More details', ['page' => $page + 1]);
             } else {
                 $body .= "\nConfirm to save this in your POS.";
-                $rows[] = $this->flow->row($conversation, $operation, 'record_confirm', 'Confirm');
+                $confirm = $this->flow->row($conversation, $operation, 'record_confirm', 'Confirm');
+                $rows[] = $confirm;
+                $body .= "\nOr type: ".$this->flow->confirmationCommand($confirm['id']);
             }
         } elseif (str_starts_with($step, 'lines:')) {
             $parentIndex = (int) substr($step, 6);
@@ -203,10 +205,15 @@ class RecordWizard
             $body .= ($repeating ? $parent['label']."\n" : '').$field['label'];
             if (isset($field['resource'])) {
                 $page = max(1, (int) ($data['page'] ?? 1));
-                $search = $kind === 'record_search' ? $text : ($data['search'] ?? '');
+                $search = $kind === 'record_search' ? mb_substr($text, 0, 100) : ($data['search'] ?? '');
                 $response = $this->pos->read($binding, $field['resource'], ['page' => $page, 'per_page' => 6, 'search' => $search] + ($field['query'] ?? []));
                 $pageData = $response['suppliers'] ?? $response;
                 $records = $pageData['data'] ?? [];
+                $suggested = false;
+                if ($records === [] && $kind === 'record_search' && $field['resource'] === 'products' && $search !== '' && empty($field['query'])) {
+                    [$matches, $suggested] = $this->flow->findProducts($this->pos->stock($binding), $search);
+                    $records = array_slice($matches, 0, 6);
+                }
                 foreach ($records as $record) {
                     $label = $record['name'] ?? $record['batch_number'] ?? $record['sale_number'] ?? '#'.$record['id'];
                     $description = '#'.$record['id'].' · '.($record['base_unit'] ?? '').' · '.($record['sku'] ?? '').(isset($record['balance']) ? ' · We owe '.$record['balance'] : '');
@@ -217,9 +224,11 @@ class RecordWizard
                         $rows[] = $this->flow->row($conversation, $operation, 'record_page', $link === 'prev_page_url' ? 'Previous' : 'Next', ['page' => $target, 'search' => $search]);
                     }
                 }
-                $body .= "\nChoose an item. Names include IDs to distinguish duplicates.";
+                $body .= $suggested
+                    ? "\nDid you mean one of these products? Type its exact name or choose it to confirm."
+                    : "\nChoose or type an item. Use the list to distinguish duplicate names by ID.";
                 if ($records === []) {
-                    $body .= "\nNo records found. Add one first, then return.";
+                    $body .= "\nNo records found. Try a different search.";
                 }
             } elseif (($choices = $this->choices($field, $state, $repeating)) !== null) {
                 $page = max(0, (int) ($data['choice_page'] ?? 0));

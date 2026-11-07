@@ -51,10 +51,95 @@ class ChatFlow
     {
         $id = (string) Str::uuid();
         DB::table('wa_actions')->insert(['id' => $id, 'conversation_id' => $conversation->id, 'version' => $conversation->version,
-            'kind' => $kind, 'binding_id' => $operation->binding_id, 'payload' => $this->encrypt($data + ['operation' => $operation->id]),
+            'kind' => $kind, 'binding_id' => $operation->binding_id, 'payload' => $this->encrypt($data + ['operation' => $operation->id, 'typed_title' => $title]),
             'expires_at' => $operation->expires_at, 'created_at' => now(), 'updated_at' => now()]);
 
         return array_filter(['id' => $id, 'title' => Str::limit($title, 24, ''), 'description' => $description ? Str::limit($description, 72, '') : null], fn ($value) => $value !== null);
+    }
+
+    /** Resolve a unique option on the current screen, with a one-time code for a typed write. */
+    public function typedAction(object $conversation, string $text): ?string
+    {
+        $command = mb_strtolower(trim($text));
+        if ($command === '' || mb_strlen($command) > 200) {
+            return null;
+        }
+
+        $matches = [];
+        $actions = DB::table('wa_actions')->where('conversation_id', $conversation->id)
+            ->where(fn ($query) => $query->where('binding_id', $conversation->binding_id)->orWhere('kind', 'switch'))
+            ->where('version', $conversation->version)
+            ->where('expires_at', '>', now())->whereNotNull('payload')->get();
+        foreach ($actions as $action) {
+            if (str_ends_with($action->kind, '_confirm')) {
+                if (in_array($action->kind, ['sale_confirm', 'record_confirm', 'contact_confirm'], true)
+                    && $command === mb_strtolower($this->confirmationCommand($action->id))) {
+                    $matches[] = $action->id;
+                }
+
+                continue;
+            }
+            $data = $this->decode($action->payload);
+            $title = $data['typed_title'] ?? '';
+            $aliases = match ($title) {
+                'Choose payment' => ['checkout', 'pay'],
+                'Walk-in / no name' => ['walk in', 'no customer'],
+                'Done with lines' => ['done'],
+                'Split / part payment' => ['split payment'],
+                default => [],
+            };
+            foreach ([$title, Str::limit($title, 24, ''), ...$aliases] as $label) {
+                if ($command === mb_strtolower(trim($label))) {
+                    $matches[] = $action->id;
+                    break;
+                }
+            }
+        }
+
+        return count($matches) === 1 ? $matches[0] : null;
+    }
+
+    public function confirmationCommand(string $actionId): string
+    {
+        return 'Confirm '.strtoupper(substr($actionId, 0, 8));
+    }
+
+    public function normalize(string $text): string
+    {
+        return trim(preg_replace('/[^\pL\pN]+/u', ' ', mb_strtolower($text)) ?? '');
+    }
+
+    /** @return array{0: array, 1: bool} Products and whether they are spelling suggestions. */
+    public function findProducts(array $products, string $search): array
+    {
+        $query = $this->normalize($search);
+        if ($query === '') {
+            return [$search === '' ? $products : [], false];
+        }
+        $matches = array_values(array_filter($products, fn (array $product) => str_contains(
+            $this->normalize($product['name'].' '.($product['sku'] ?? '')), $query,
+        )));
+        if ($matches !== [] || ! preg_match('/^[a-z0-9 ]{4,60}$/D', $query)) {
+            return [$matches, false];
+        }
+
+        $words = explode(' ', $query);
+        $limit = strlen($query) >= 8 ? 2 : 1;
+        $ranked = [];
+        foreach ($products as $index => $product) {
+            $name = explode(' ', $this->normalize($product['name']));
+            $best = $limit + 1;
+            for ($offset = 0; $offset + count($words) <= count($name); $offset++) {
+                $candidate = implode(' ', array_slice($name, $offset, count($words)));
+                $best = min($best, levenshtein($query, $candidate));
+            }
+            if ($best <= $limit) {
+                $ranked[$index] = $best;
+            }
+        }
+        asort($ranked);
+
+        return [array_map(fn ($index) => $products[$index], array_keys($ranked)), $ranked !== []];
     }
 
     public function menu(string $body, array $rows, string $button = 'Choose'): array
