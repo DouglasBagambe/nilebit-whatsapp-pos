@@ -55,6 +55,11 @@ class WhatsAppConversation
         }
         if (! $reply && ($binding = $this->activeBinding($conversation))) {
             $command = $flow->normalize($text);
+            foreach (app(RecordForms::class)->definitions($binding->backend) as $key => $definition) {
+                if ($command === $flow->normalize($definition['title'])) {
+                    return app(RecordWizard::class)->handle($conversation, $this->typedCommand('record_start', ['form' => $key]), $message);
+                }
+            }
             if (preg_match('/^(?:check |show |view )?(?:stock|inventory)(?: (?:for |of )?(.*))?$/iu', $rawText, $matches)) {
                 return app(StockBrowser::class)->handle($conversation, $binding, null, $matches[1] ?? '');
             }
@@ -83,11 +88,6 @@ class WhatsAppConversation
             }
             if (preg_match('/^(?:debt(?: for)?|customers?)(?: (.*))?$/iu', $rawText, $matches)) {
                 return app(CustomerBrowser::class)->handle($conversation, $binding, null, $matches[1] ?? '');
-            }
-            foreach (app(RecordForms::class)->definitions($binding->backend) as $key => $definition) {
-                if ($command === $flow->normalize($definition['title'])) {
-                    return app(RecordWizard::class)->handle($conversation, $this->typedCommand('record_start', ['form' => $key]), $message);
-                }
             }
             $route = match ($command) {
                 'reports', 'show reports' => [ReportBrowser::class, 'report_menu'],

@@ -88,8 +88,7 @@ class RecordWizardTest extends TestCase
     public function test_stock_count_zero_is_a_count_and_not_an_addition(): void
     {
         $id = $this->business();
-        $menu = $this->choose($id, $this->send($id), 'Business tasks');
-        $menu = $this->choose($id, $menu, 'Stock count');
+        $menu = $this->send($id, 'Stock count');
         $this->choose($id, $menu, 'Juice');
         $this->send($id, '0');
         $review = $this->send($id, 'Shelf counted');
