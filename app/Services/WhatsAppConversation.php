@@ -51,8 +51,8 @@ class WhatsAppConversation
         if (! $reply && str_starts_with($text, 'debt ') && ($binding = $this->activeBinding($conversation))) {
             return app(CustomerBrowser::class)->handle($conversation, $binding, null, trim(mb_substr($message['text']['body'], 5)));
         }
-        if (! $reply && str_starts_with($text, 'stock ') && ($binding = $this->activeBinding($conversation))) {
-            return app(StockBrowser::class)->handle($conversation, $binding, null, trim(mb_substr($message['text']['body'], 6)));
+        if (! $reply && ($text === 'stock' || str_starts_with($text, 'stock ')) && ($binding = $this->activeBinding($conversation))) {
+            return app(StockBrowser::class)->handle($conversation, $binding, null, trim(mb_substr(trim($message['text']['body']), 6)));
         }
         $showProfiles = false;
         $warning = '';
