@@ -37,10 +37,13 @@ class StockBrowserTest extends TestCase
             return $send(['interactive' => ['list_reply' => ['id' => $row['id']]]]);
         };
         $menu = $choose($send(), 'View stock');
+        $stockCommand = $send(['text' => ['body' => '  STOCK  ']]);
+        $this->assertStringContainsString('15 matching products', $stockCommand['interactive']['body']['text']);
+        $menu = $stockCommand;
         $menu = $choose($menu, 'Next products');
         $menu = $choose($menu, 'Next products');
         $this->assertContains('Item 15', array_column($menu['interactive']['action']['sections'][0]['rows'], 'title'));
-        $search = $send(['text' => ['body' => 'stock SKU-15']]);
+        $search = $send(['text' => ['body' => '  stock SKU-15  ']]);
         $this->assertStringContainsString('1 matching products', $search['interactive']['body']['text']);
         $products[14]['stock'] = 24;
 
