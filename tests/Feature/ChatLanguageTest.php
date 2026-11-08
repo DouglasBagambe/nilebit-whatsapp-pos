@@ -38,6 +38,8 @@ class ChatLanguageTest extends TestCase
     {
         return [
             ['two bottles', 'bottle', '2'],
+            ['two boxes', 'box', '2'],
+            ['UShs 2,000', null, '2000'],
             ['UGX 2,000', null, '2000'],
             ['2,000 UGX', null, '2000'],
             ['-1', null, '-1'],

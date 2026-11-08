@@ -86,7 +86,7 @@ class ChatFlow
                 'Walk-in / no name' => ['walk in', 'no customer'],
                 'Done with lines' => ['done'],
                 'Split / part payment' => ['split payment'],
-                default => $action->kind === 'sale_unit' ? [$title.'s'] : [],
+                default => $action->kind === 'sale_unit' ? [app(ChatLanguage::class)->plural($title)] : [],
             };
             foreach ([$title, Str::limit($title, 24, ''), ...$aliases] as $label) {
                 if ($command === mb_strtolower(trim($label))) {

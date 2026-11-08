@@ -47,14 +47,23 @@ class ChatLanguage
         return trim($text);
     }
 
+    public function plural(string $unit): string
+    {
+        if (preg_match('/(?:s|sh|ch|x|z)$/iu', $unit)) {
+            return $unit.'es';
+        }
+
+        return preg_match('/[^aeiou]y$/iu', $unit) ? mb_substr($unit, 0, -1).'ies' : $unit.'s';
+    }
+
     /** Keep signs and decimal separators intact. Only unambiguous thousands grouping is removed. */
     public function number(string $text, ?string $unit = null): string
     {
         $text = trim($text);
         if ($unit !== null) {
-            $text = preg_replace('/\s+'.preg_quote($unit, '/').'s?$/iu', '', $text);
+            $text = preg_replace('/\s+'.'(?:'.preg_quote($unit, '/').'|'.preg_quote($this->plural($unit), '/').')$/iu', '', $text);
         }
-        $text = trim(preg_replace('/^(?:UGX|USH|UShs)\s*|\s*(?:UGX|USH|UShs)$/iu', '', $text));
+        $text = trim(preg_replace('/^(?:UGX|USHS|USH)\s*|\s*(?:UGX|USHS|USH)$/iu', '', $text));
         $words = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
             'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty'];
         $number = array_search(mb_strtolower($text), $words, true);
