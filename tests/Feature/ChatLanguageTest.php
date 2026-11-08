@@ -25,6 +25,7 @@ class ChatLanguageTest extends TestCase
             ['Please show me Stock count', 'Stock count'],
             ['Send me receipt S-000005 as PDF', 'receipt S-000005 pdf'],
             ['Please show customers', 'customers'],
+            ['Could you show me a stock report as a PDF, please?', 'stock report pdf'],
         ];
     }
 

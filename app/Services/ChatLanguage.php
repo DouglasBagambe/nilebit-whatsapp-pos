@@ -10,9 +10,10 @@ class ChatLanguage
         $text = trim(preg_replace('/\s+/u', ' ', $text) ?? $text);
         $text = preg_replace('/^(?:please\s+)?(?:can you|could you|would you|i want to|i need to|help me)\s+/iu', '', $text);
         $text = preg_replace('/^please\s+|[,!? .]+$|\s+please$/iu', '', $text);
+        $text = rtrim(preg_replace('/(?:,\s*|\s+)please[!? .]*$/iu', '', $text), ' ,!? .');
         $text = preg_replace('/^(?:show|tell|send|give|get) me\s+/iu', '', $text);
         $text = preg_replace('/^(?:show|send|give|get)\s+(?:the |our |my )?/iu', '', $text);
-        $text = preg_replace('/^(?:the|our|my)\s+/iu', '', $text);
+        $text = preg_replace('/^(?:a|the|our|my)\s+/iu', '', $text);
 
         if (preg_match('/^(?:how many|do we have)\s+(.+?)(?:\s+do we have)?(?:\s+in stock)?$/iu', $text, $matches)) {
             return 'stock '.trim($matches[1]);

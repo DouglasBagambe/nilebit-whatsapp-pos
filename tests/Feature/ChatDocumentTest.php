@@ -56,6 +56,37 @@ class ChatDocumentTest extends TestCase
         Http::assertNotSent(fn ($request) => $request->method() !== 'GET');
     }
 
+    public function test_pdf_request_keeps_its_format_when_the_user_chooses_a_period(): void
+    {
+        $id = $this->business();
+        $menu = $this->send($id, 'Send me a sales report as a PDF');
+        $row = collect($menu['interactive']['action']['sections'][0]['rows'])->firstWhere('title', 'Today');
+        $this->assertNotNull($row);
+        $reply = app(WhatsAppConversation::class)->reply(DB::table('wa_conversations')->find($id), ['interactive' => ['list_reply' => ['id' => $row['id']]]]);
+        $this->assertSame('document', $reply['type']);
+    }
+
+    public function test_stock_pdf_uses_the_report_endpoint_instead_of_a_product_search(): void
+    {
+        $id = $this->business();
+        Http::fake(['https://pdf.example.test/api/reports/stock' => Http::response(['summary' => ['stock_value' => 25000, 'products' => 2]])]);
+        $reply = $this->send($id, 'Could you show me a stock report as a PDF, please?');
+        $this->assertSame('document', $reply['type']);
+        Http::assertSent(fn ($request) => str_ends_with($request->url(), '/reports/stock'));
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), '/pos/products'));
+    }
+
+    public function test_retail_binding_cannot_open_a_production_report(): void
+    {
+        $id = $this->business();
+        $this->expectException(ValidationException::class);
+        try {
+            $this->send($id, 'production report today');
+        } finally {
+            Http::assertNotSent(fn ($request) => str_contains($request->url(), '/reports/production'));
+        }
+    }
+
     public function test_last_month_uses_the_complete_previous_calendar_month(): void
     {
         $id = $this->business();
