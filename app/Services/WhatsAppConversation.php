@@ -54,37 +54,49 @@ class WhatsAppConversation
             return app(GuidedSale::class)->handle($conversation, null, $message);
         }
         if (! $reply && ($binding = $this->activeBinding($conversation))) {
+            $rawText = app(ChatLanguage::class)->command($rawText);
+            $text = mb_strtolower($rawText);
             $command = $flow->normalize($text);
             foreach (app(RecordForms::class)->definitions($binding->backend) as $key => $definition) {
                 if ($command === $flow->normalize($definition['title'])) {
                     return app(RecordWizard::class)->handle($conversation, $this->typedCommand('record_start', ['form' => $key]), $message);
                 }
             }
-            if (preg_match('/^(?:check |show |view )?(?:stock|inventory)(?: (?:for |of )?(.*))?$/iu', $rawText, $matches)) {
-                return app(StockBrowser::class)->handle($conversation, $binding, null, $matches[1] ?? '');
-            }
             if (preg_match('/^(?:sell|record (?:a )?sale)(?:\s+(.*))?$/iu', $rawText, $matches)) {
                 $search = trim($matches[1] ?? '');
+                $search = preg_replace_callback('/^([a-z]+)\s+/iu', fn ($word) => app(ChatLanguage::class)->number($word[1]).' ', $search);
                 $quantity = null;
+                $unit = null;
                 if (preg_match('/^(\d{1,7}(?:\.\d{1,3})?)\s+(.+)$/u', $search, $line)
                     && (float) $line[1] > 0 && (float) $line[1] <= 1000000) {
                     [, $quantity, $search] = $line;
+                    if (preg_match('/^(\S+)\s+of\s+(.+)$/iu', $search, $selection)) {
+                        [, $unit, $search] = $selection;
+                    }
                 }
 
-                return app(GuidedSale::class)->handle($conversation, $this->typedCommand('sale_start', ['search' => $search, 'quantity' => $quantity]), $message);
+                return app(GuidedSale::class)->handle($conversation, $this->typedCommand('sale_start', ['search' => $search, 'quantity' => $quantity, 'unit' => $unit]), $message);
             }
-            if (preg_match('/^(?:show |view )?(dashboard|today at a glance|(?:sales|profit) (?:report|summary)|debt report|customer debt)(?: (today|last 7 days|this week|this month))?$/', $command, $matches)) {
+            if (preg_match('/^(?:show |view )?(dashboard|today at a glance|(?:sales|profit|stock|production) (?:report|summary)|debt report|customer debt)(?: (today|yesterday|last 7 days|this week|last week|this month|last month))?(?: (pdf))?$/', $command, $matches)) {
                 $resource = match ($matches[1]) {
                     'dashboard', 'today at a glance' => 'dashboard',
                     'debt report', 'customer debt' => 'debt_report',
                     'sales report', 'sales summary' => 'sales_report',
+                    'stock report', 'stock summary' => 'stock_report',
+                    'production report', 'production summary' => 'production_report',
                     default => 'profit_report',
                 };
                 $period = match ($matches[2] ?? '') {
-                    'today' => 'today', 'last 7 days' => 'week', 'this week' => 'calendar_week', 'this month' => 'month', default => null,
+                    'today' => 'today', 'yesterday' => 'yesterday', 'last 7 days' => 'week', 'this week' => 'calendar_week', 'last week' => 'last_week', 'this month' => 'month', 'last month' => 'last_month', default => null,
                 };
 
-                return app(ReportBrowser::class)->handle($conversation, $binding, $this->typedCommand('report_open', ['resource' => $resource, 'period' => $period]));
+                return app(ReportBrowser::class)->handle($conversation, $binding, $this->typedCommand('report_open', ['resource' => $resource, 'period' => $period, 'format' => isset($matches[3]) ? 'pdf' : 'text']));
+            }
+            if (preg_match('/^(?:check |show |view )?(?:stock|inventory)(?: (?:for |of )?(.*))?$/iu', $rawText, $matches)) {
+                return app(StockBrowser::class)->handle($conversation, $binding, null, $matches[1] ?? '');
+            }
+            if (preg_match('/^receipt (S-[a-z0-9-]+)(?: (pdf))?$/iu', $rawText, $matches)) {
+                return app(SalesHistory::class)->handle($conversation, $binding, $this->typedCommand(isset($matches[2]) ? 'history_pdf' : 'history_receipt', ['number' => $matches[1]]));
             }
             if (preg_match('/^(?:debt(?: for)?|customers?)(?: (.*))?$/iu', $rawText, $matches)) {
                 return app(CustomerBrowser::class)->handle($conversation, $binding, null, $matches[1] ?? '');

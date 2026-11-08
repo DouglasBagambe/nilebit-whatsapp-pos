@@ -16,9 +16,13 @@ class ReportBrowser
     {
         $member = $this->pos->membership($binding->backend, Crypt::decryptString($binding->token), $binding->shop_id);
         $data = $this->flow->decode($action->payload);
+        $pdf = $action->kind === 'report_pdf' || ($data['format'] ?? null) === 'pdf';
         $options = ['dashboard' => 'Today at a glance'];
         if (in_array($member['role'], ['owner', 'manager'], true)) {
-            $options += ['sales_report' => 'Sales summary', 'debt_report' => 'Customer debt'];
+            $options += ['sales_report' => 'Sales summary', 'debt_report' => 'Customer debt', 'stock_report' => 'Stock summary'];
+            if ($binding->backend === 'production') {
+                $options['production_report'] = 'Production summary';
+            }
         }
         if ($member['role'] === 'owner') {
             $options['profit_report'] = 'Profit summary';
@@ -35,21 +39,30 @@ class ReportBrowser
             foreach ($options as $key => $title) {
                 $rows[] = $this->flow->row($conversation, $controls, 'report_open', $title, ['resource' => $key]);
             }
-        } elseif (in_array($resource, ['sales_report', 'profit_report'], true) && ! isset($data['period'])) {
+        } elseif (in_array($resource, ['sales_report', 'profit_report', 'production_report'], true) && ! isset($data['period'])) {
             $body .= "\n".$options[$resource].' — choose the period.';
-            foreach (['today' => 'Today', 'week' => 'Last 7 days', 'month' => 'This month'] as $period => $title) {
-                $rows[] = $this->flow->row($conversation, $controls, 'report_open', $title, ['resource' => $resource, 'period' => $period]);
+            foreach (['today' => 'Today', 'yesterday' => 'Yesterday', 'week' => 'Last 7 days', 'month' => 'This month', 'last_month' => 'Last month'] as $period => $title) {
+                $rows[] = $this->flow->row($conversation, $controls, 'report_open', $title, ['resource' => $resource, 'period' => $period, 'format' => $pdf ? 'pdf' : 'text']);
             }
         } else {
             $query = [];
-            if (in_array($resource, ['sales_report', 'profit_report'], true)) {
+            if (in_array($resource, ['sales_report', 'profit_report', 'production_report'], true)) {
                 $caps = $this->pos->read($binding, 'capabilities');
                 $today = CarbonImmutable::createFromFormat('!Y-m-d', $caps['today']);
                 $from = match ($data['period']) {
-                    'today' => $today, 'week' => $today->subDays(6), 'calendar_week' => $today->startOfWeek(CarbonImmutable::MONDAY), 'month' => $today->startOfMonth(),
+                    'today' => $today, 'yesterday' => $today->subDay(), 'week' => $today->subDays(6),
+                    'calendar_week' => $today->startOfWeek(CarbonImmutable::MONDAY),
+                    'last_week' => $today->subWeek()->startOfWeek(CarbonImmutable::MONDAY),
+                    'month' => $today->startOfMonth(), 'last_month' => $today->startOfMonth()->subMonth(),
                     default => throw ValidationException::withMessages(['period' => 'Choose a supported reporting period.']),
                 };
-                $query = ['from' => $from->toDateString(), 'to' => $today->toDateString()];
+                $to = match ($data['period']) {
+                    'yesterday' => $today->subDay(),
+                    'last_week' => $today->startOfWeek(CarbonImmutable::MONDAY)->subDay(),
+                    'last_month' => $today->startOfMonth()->subDay(),
+                    default => $today,
+                };
+                $query = ['from' => $from->toDateString(), 'to' => $to->toDateString()];
             }
             $result = $this->pos->read($binding, $resource, $query);
             $summary = $resource === 'dashboard' ? ($result['today'] ?? []) : ($result['summary'] ?? []);
@@ -64,6 +77,16 @@ class ReportBrowser
                     $lines[] = Str::limit(ucfirst(str_replace('_', ' ', $key)).': '.$value, 120, '');
                 }
             }
+            if ($lines === []) {
+                $lines[] = 'The POS returned no summary figures for this report.';
+            }
+            if ($pdf) {
+                $heading = $options[$resource];
+                $documentLines = $query !== [] ? [$query['from'].' to '.$query['to']] : ($date ? ['As of '.$date] : []);
+
+                return app(ChatDocument::class)->make($binding->name, $heading, [...$documentLines, ...$lines], $resource.'-'.($date ?? $query['to'] ?? 'current'));
+            }
+            $rows[] = $this->flow->row($conversation, $controls, 'report_pdf', 'Send PDF', ['resource' => $resource, 'period' => $data['period'] ?? null]);
             $page = min(max(0, (int) ($data['page'] ?? 0)), max(0, (int) ceil(count($lines) / 5) - 1));
             $body .= "\n".implode("\n", array_slice($lines, $page * 5, 5))."\nAmounts use your POS currency. Refreshed on opening.";
             foreach ([-1 => 'Previous figures', 1 => 'More figures'] as $offset => $title) {

@@ -46,6 +46,7 @@ class GuidedSale
         $step = $draft->step;
         if ($kind === 'sale_start' && isset($data['quantity'])) {
             $state['suggested_quantity'] = $data['quantity'];
+            $state['suggested_unit'] = $data['unit'] ?? null;
         }
         if ($kind === 'sale_cancel') {
             if ($step === 'review') {
@@ -79,7 +80,7 @@ class GuidedSale
             $state['unit'] = $units[(int) $data['unit']] ?? throw ValidationException::withMessages(['unit' => 'Choose an available unit.']);
             $step = 'quantity';
         } elseif (($kind === 'sale_quantity' || $kind === 'sale_text') && $step === 'quantity') {
-            $raw = (string) ($data['quantity'] ?? trim($message['text']['body'] ?? ''));
+            $raw = app(ChatLanguage::class)->number((string) ($data['quantity'] ?? $message['text']['body'] ?? ''), $state['unit']['name']);
             if (! preg_match('/^\d{1,7}(\.\d{1,3})?$/D', $raw) || (float) $raw <= 0 || (float) $raw > 1000000) {
                 return $this->text('Enter a quantity greater than 0, up to 1,000,000, with at most 3 decimal places. Or send Cancel.');
             }
@@ -136,7 +137,7 @@ class GuidedSale
         } elseif ($kind === 'sale_discount' && $step === 'cart') {
             $step = 'discount';
         } elseif (($kind === 'sale_text' || $kind === 'sale_no_discount') && $step === 'discount') {
-            $raw = $kind === 'sale_no_discount' ? '0' : trim($message['text']['body'] ?? '');
+            $raw = $kind === 'sale_no_discount' ? '0' : app(ChatLanguage::class)->number($message['text']['body'] ?? '');
             if (! preg_match('/^\d{1,15}$/D', $raw) || (int) $raw > array_sum(array_column($state['items'], 'line_total'))) {
                 return $this->text('Enter a whole-number discount from 0 up to the cart subtotal. Or send Cancel.');
             }
@@ -157,7 +158,7 @@ class GuidedSale
             $step = 'payment_amount';
         } elseif (($kind === 'sale_text' || $kind === 'sale_remaining') && $step === 'payment_amount') {
             $remaining = $this->total($state) - array_sum(array_column($state['payments'], 'amount'));
-            $raw = $kind === 'sale_remaining' ? (string) $remaining : trim($message['text']['body'] ?? '');
+            $raw = $kind === 'sale_remaining' ? (string) $remaining : app(ChatLanguage::class)->number($message['text']['body'] ?? '');
             if (! preg_match('/^[1-9]\d{0,14}$/D', $raw) || (int) $raw > $remaining) {
                 return $this->text('Enter a whole-number payment from 1 to '.$remaining.'. Or send Cancel.');
             }
@@ -226,6 +227,9 @@ class GuidedSale
             $this->pages($rows, $conversation, $draft, 'sale_products', $page, count($products), $search);
         } elseif ($step === 'units') {
             $body .= $state['product']['name'].' — choose the selling unit.';
+            if (! empty($state['suggested_unit'])) {
+                $body .= "\nRequested unit: ".Str::limit($state['suggested_unit'], 50, '').'. Please choose the matching configured unit.';
+            }
             $units = $this->units($state['product']);
             foreach (array_slice($units, $page * 7, 7, true) as $index => $unit) {
                 $rows[] = $this->row($conversation, $draft, 'sale_unit', $unit['name'], ['unit' => $index], $unit['price'].' per '.$unit['name']);
