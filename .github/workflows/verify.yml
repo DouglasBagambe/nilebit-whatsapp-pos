@@ -98,6 +98,8 @@ jobs:
           extensions: mbstring, intl, pdo_pgsql, pdo_sqlite, pcntl
           coverage: none
       - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: cp .env.example .env
+      - run: composer audit --locked --no-interaction
       - name: Verify gateway against PostgreSQL
         env:
           DB_CONNECTION: pgsql

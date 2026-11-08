@@ -93,6 +93,24 @@ class GuidedSaleTest extends TestCase
         $this->assertCount(1, Http::recorded(fn ($request) => $request->method() === 'POST'));
     }
 
+    public function test_conversational_sale_keeps_requested_units_and_accepts_number_words_without_saving(): void
+    {
+        $id = $this->setupBusiness();
+        $this->fakePos();
+        $type = fn (string $text) => $this->send($id, ['text' => ['body' => $text]]);
+        $suggestion = $type('I sold two bottles of Mangoe Juice');
+        $this->assertStringContainsString('Did you mean', $suggestion['interactive']['body']['text']);
+        $units = $type('Mango Juice');
+        $this->assertStringContainsString('Requested unit: bottles', $units['interactive']['body']['text']);
+        $type('bottles');
+        $cart = $type('two bottles');
+        $this->assertStringContainsString('Total: 4000', $cart['interactive']['body']['text']);
+        $type('Order discount');
+        $cart = $type('UGX 1,000');
+        $this->assertStringContainsString('Total: 3000', $cart['interactive']['body']['text']);
+        Http::assertNotSent(fn ($request) => $request->method() === 'POST');
+    }
+
     public function test_walk_in_cash_sale_requires_review_and_uses_the_existing_pos_api(): void
     {
         $id = $this->setupBusiness();

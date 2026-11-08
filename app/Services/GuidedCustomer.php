@@ -67,7 +67,7 @@ class GuidedCustomer
             $state['payload'] = ['name' => $state['name'], 'phone' => $phone];
             $step = 'review';
         } elseif (($kind === 'contact_text' || $kind === 'contact_amount') && $step === 'amount') {
-            $raw = (string) ($data['amount'] ?? $text);
+            $raw = app(ChatLanguage::class)->number((string) ($data['amount'] ?? $text));
             if (! preg_match('/^[0-9]{1,12}$/D', $raw) || (int) $raw < 1 || (int) $raw > (int) $state['customer']['balance']) {
                 return $this->flow->text('Enter a whole amount greater than zero, no more than '.$state['customer']['balance'].'. Or send Cancel.');
             }

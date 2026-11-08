@@ -113,6 +113,9 @@ class RecordWizard
                     }
                     if ($kind !== 'record_skip') {
                         $value = $data['value'] ?? $text;
+                        if (is_string($value) && (str_contains($field['rules'], '|numeric') || str_contains($field['rules'], '|integer'))) {
+                            $value = app(ChatLanguage::class)->number((string) $value);
+                        }
                         Validator::make(['value' => $value], ['value' => $field['rules']])->validate();
                         $choices = $this->choices($field, $state, $repeating);
                         if ($choices !== null && ! array_key_exists($value, $choices)) {

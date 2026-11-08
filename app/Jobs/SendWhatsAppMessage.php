@@ -50,6 +50,20 @@ class SendWhatsAppMessage implements ShouldQueue
                 return;
             }
             $payload = json_decode(Crypt::decryptString($message->payload), true, flags: JSON_THROW_ON_ERROR);
+            if ($payload['type'] === 'document' && isset($payload['_pdf'])) {
+                $bytes = base64_decode($payload['_pdf'], true);
+                if ($bytes === false || ! str_starts_with($bytes, '%PDF-') || strlen($bytes) > 2097152) {
+                    throw new RuntimeException('The queued PDF is invalid.');
+                }
+                $upload = Http::withToken($token)->timeout(20)->connectTimeout(5)->withOptions(['allow_redirects' => false])
+                    ->attach('file', $bytes, $payload['document']['filename'], ['Content-Type' => 'application/pdf'])
+                    ->post("https://graph.facebook.com/{$version}/{$phone}/media", ['messaging_product' => 'whatsapp', 'type' => 'application/pdf']);
+                if (! $upload->successful() || ! is_string($upload->json('id')) || ! ctype_digit($upload->json('id'))) {
+                    throw new RuntimeException('WhatsApp did not accept the PDF upload (HTTP '.$upload->status().').');
+                }
+                $payload['document']['id'] = $upload->json('id');
+                unset($payload['_pdf']);
+            }
             $response = Http::withToken($token)->timeout(15)->connectTimeout(5)->withOptions(['allow_redirects' => false])
                 ->post("https://graph.facebook.com/{$version}/{$phone}/messages", ['messaging_product' => 'whatsapp', 'to' => $conversation->sender] + $payload);
             if (! $response->successful() || ! is_string($response->json('messages.0.id'))) {

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 /** Fresh POS receipts, including cashiers' server-enforced own-sale scope. */
 class SalesHistory
@@ -18,7 +19,15 @@ class SalesHistory
         $controls = (object) ['id' => '', 'binding_id' => $binding->id, 'expires_at' => now()->addMinutes(15)];
         $rows = [];
         $body = Str::limit($binding->name, 60, '')."\n";
-        if ($action->kind === 'history_receipt') {
+        if (in_array($action->kind, ['history_receipt', 'history_pdf'], true)) {
+            if (isset($data['number'])) {
+                $sales = $this->pos->read($binding, 'sales', ['search' => $data['number'], 'per_page' => 100, 'page' => 1]);
+                $match = collect($sales['data'] ?? [])->first(fn ($sale) => strcasecmp($sale['sale_number'], $data['number']) === 0);
+                if ($match === null) {
+                    throw ValidationException::withMessages(['receipt' => 'That receipt was not found in the accessible sales. Open Sales history and choose it from the list.']);
+                }
+                $data['sale'] = $match['id'];
+            }
             $receipt = $this->pos->read($binding, 'sale', [], (int) $data['sale']);
             $lines = [];
             foreach ($receipt['items'] ?? [] as $item) {
@@ -27,6 +36,17 @@ class SalesHistory
             foreach ($receipt['payments'] ?? [] as $payment) {
                 $lines[] = 'Payment: '.$payment['method'].' · '.$payment['amount'];
             }
+            if ($action->kind === 'history_pdf') {
+                $summary = ['Status: '.$receipt['status'], 'Total: '.$receipt['total'],
+                    'Paid at sale: '.$receipt['amount_paid'], 'Original due: '.$receipt['amount_due'],
+                    'Customer: '.($receipt['customer']['name'] ?? 'Walk-in')];
+                if (isset($receipt['outstanding'])) {
+                    $summary[] = 'Outstanding now: '.$receipt['outstanding'];
+                }
+
+                return app(ChatDocument::class)->make($binding->name, 'Receipt '.$receipt['sale_number'], [...$summary, ...$lines], 'receipt-'.$receipt['sale_number']);
+            }
+            $rows[] = $this->flow->row($conversation, $controls, 'history_pdf', 'Receipt PDF', ['sale' => $receipt['id']]);
             $page = min(max(0, (int) ($data['page'] ?? 0)), max(0, (int) ceil(count($lines) / 5) - 1));
             $body .= Str::limit($receipt['sale_number'], 60, '').' · '.$receipt['status']."\nTotal: ".$receipt['total']."\nPaid at sale: ".$receipt['amount_paid']."\nOriginal due: ".$receipt['amount_due'];
             if (isset($receipt['outstanding'])) {
